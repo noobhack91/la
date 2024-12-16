@@ -1,31 +1,31 @@
-// controllers/documentController.js
-import { sequelize, TenderDocument, Consignee } from '../models/index.js';
-import { uploadFile } from '../utils/azureStorage.js';
+// server/controllers/tenderDocumentController.js
 import logger from '../config/logger.js';
+import { Consignee, sequelize, TenderDocument } from '../models/index.js';
+import { containers, uploadFile } from '../utils/azureStorage.js';
 
-// Create LOA
 export const createLOA = async (req, res) => {
   const transaction = await sequelize.transaction();
   
   try {
-    const { tenderId, documentNumber, documentDate, remarks } = req.body;
+    const { tenderId, loaNumber, loaDate, remarks } = req.body;
 
     let documentPath = null;
     if (req.file) {
-      documentPath = await uploadFile(req.file, 'loa');
+      documentPath = await uploadFile(req.file, containers.LOA);
     }
 
     const loa = await TenderDocument.create({
       tenderId,
+      loaNumber,
+      loaDate: new Date(loaDate),
+      loaDocumentPath: documentPath,
       type: 'LOA',
-      documentNumber,
-      documentDate: new Date(documentDate),
-      documentPath,
       remarks,
       createdBy: req.user.id
     }, { transaction });
 
     await transaction.commit();
+    logger.info(`LOA created for tender ${tenderId}`);
     res.status(201).json(loa);
   } catch (error) {
     await transaction.rollback();
@@ -34,55 +34,55 @@ export const createLOA = async (req, res) => {
   }
 };
 
-// Create PO with Consignees
 export const createPO = async (req, res) => {
   const transaction = await sequelize.transaction();
   
   try {
     const { 
       tenderId, 
-      loaId,
-      documentNumber, 
-      documentDate, 
+      loaId, 
+      poNumber, 
+      poDate, 
       remarks,
       consignees 
     } = req.body;
 
-    // Validate consignees
+    // Validate consignees data
     if (!Array.isArray(consignees) || consignees.length === 0) {
       throw new Error('At least one consignee is required for PO');
     }
 
     let documentPath = null;
     if (req.file) {
-      documentPath = await uploadFile(req.file, 'po');
+      documentPath = await uploadFile(req.file, containers.PO);
     }
 
     // Create PO
     const po = await TenderDocument.create({
       tenderId,
-      parentId: loaId, // Optional LOA reference
+      parentId: loaId, // Link to LOA if provided
+      poNumber,
+      poDate: new Date(poDate),
+      poDocumentPath: documentPath,
       type: 'PO',
-      documentNumber,
-      documentDate: new Date(documentDate),
-      documentPath,
       remarks,
       createdBy: req.user.id
     }, { transaction });
 
     // Create consignees
     await Consignee.bulkCreate(
-      consignees.map(consignee => ({
+      consignees.map((consignee, index) => ({
         ...consignee,
         tenderId,
-        documentId: po.id,
+        tenderDocumentId: po.id,
+        srNo: `${poNumber}-${index + 1}`,
         createdBy: req.user.id
       })),
       { transaction }
     );
 
     await transaction.commit();
-
+    
     // Fetch complete PO with consignees
     const completePO = await TenderDocument.findByPk(po.id, {
       include: [{
@@ -91,6 +91,7 @@ export const createPO = async (req, res) => {
       }]
     });
 
+    logger.info(`PO created for tender ${tenderId}`);
     res.status(201).json(completePO);
   } catch (error) {
     await transaction.rollback();
@@ -99,18 +100,12 @@ export const createPO = async (req, res) => {
   }
 };
 
-// Get Documents
-export const getDocuments = async (req, res) => {
+export const getTenderDocuments = async (req, res) => {
   try {
-    const { tenderId, type } = req.query;
-    const where = { tenderId };
-    
-    if (type) {
-      where.type = type;
-    }
+    const { tenderId } = req.params;
 
     const documents = await TenderDocument.findAll({
-      where,
+      where: { tenderId },
       include: [
         {
           model: TenderDocument,
@@ -125,12 +120,15 @@ export const getDocuments = async (req, res) => {
           as: 'consignees'
         }
       ],
-      order: [['createdAt', 'DESC']]
+      order: [
+        ['createdAt', 'DESC'],
+        ['purchaseOrders', 'createdAt', 'DESC']
+      ]
     });
 
     res.json(documents);
   } catch (error) {
-    logger.error('Error fetching documents:', error);
+    logger.error('Error fetching tender documents:', error);
     res.status(500).json({ error: error.message });
   }
 };

@@ -1,3 +1,4 @@
+// models/definitions/Consignee.js
 import { DataTypes } from 'sequelize';
 
 export default (sequelize) => {
@@ -9,9 +10,22 @@ export default (sequelize) => {
     },
     tenderId: {
       type: DataTypes.UUID,
-      allowNull: false
+      allowNull: false,
+      references: {
+        model: 'tenders',
+        key: 'id'
+      }
     },
-    srNo: {
+    documentId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'tender_documents',
+        key: 'id'
+      },
+      comment: 'References the PO this consignee belongs to'
+    },
+    facilityName: {
       type: DataTypes.STRING,
       allowNull: false
     },
@@ -23,31 +37,39 @@ export default (sequelize) => {
       type: DataTypes.STRING,
       allowNull: false
     },
-    facilityName: {
+    machineCount: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 1
+    },
+    contactPerson: {
       type: DataTypes.STRING,
       allowNull: false
     },
-    consignmentStatus: {
+    contactPhone: {
+      type: DataTypes.STRING,
+      allowNull: false
+    },
+    contactEmail: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      validate: {
+        isEmail: true
+      }
+    },
+    status: {
       type: DataTypes.ENUM(
         'Processing',
         'Dispatched',
         'Installation Pending',
         'Installation Done',
-        'Invoice Done',
-        'Bill Submitted'
+        'Invoice Done'
       ),
       defaultValue: 'Processing'
     },
-    accessoriesPending: {
-      type: DataTypes.JSONB,
-      defaultValue: {
-        status: false,
-        count: 0,
-        items: []
-      }
-    },
-    serialNumber: {
-      type: DataTypes.STRING
+    remarks: {
+      type: DataTypes.TEXT,
+      allowNull: true
     }
   }, {
     tableName: 'consignees',

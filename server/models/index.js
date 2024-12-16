@@ -12,7 +12,9 @@ import defineLOA from './definitions/LOA.js';
 import defineLogisticsDetails from './definitions/LogisticsDetails.js';
 import definePurchaseOrder from './definitions/PurchaseOrder.js';
 import defineTender from './definitions/Tender.js';
+import defineTenderDocument from './definitions/TenderDocument.js';
 import defineUser from './definitions/User.js';
+
 dotenv.config();
 
 const sequelize = new Sequelize(
@@ -52,6 +54,7 @@ const Accessory = defineAccessory(sequelize);
 const Consumable = defineConsumable(sequelize);
 const LOA = defineLOA(sequelize);
 const PurchaseOrder = definePurchaseOrder(sequelize);
+const TenderDocument = defineTenderDocument(sequelize);
 // Define associations  
 Tender.hasMany(Consignee, {
   foreignKey: 'tenderId',
@@ -184,6 +187,36 @@ Tender.hasMany(PurchaseOrder, {
 PurchaseOrder.belongsTo(Tender, {
   foreignKey: 'tender_id'
 });
+Tender.hasMany(TenderDocument, {
+  foreignKey: 'tenderId',
+  as: 'documents'
+});
+
+TenderDocument.belongsTo(Tender, {
+  foreignKey: 'tenderId'
+});
+
+// Self-referential relationship for LOA-PO
+TenderDocument.hasMany(TenderDocument, {
+  foreignKey: 'parentId',
+  as: 'purchaseOrders'
+});
+
+TenderDocument.belongsTo(TenderDocument, {
+  foreignKey: 'parentId',
+  as: 'loa'
+});
+
+// Consignee relationships
+TenderDocument.hasMany(Consignee, {
+  foreignKey: 'tenderDocumentId',
+  as: 'consignees'
+});
+
+Consignee.belongsTo(TenderDocument, {
+  foreignKey: 'tenderDocumentId',
+  as: 'document'
+});
 
 export {
   Accessory,
@@ -194,7 +227,6 @@ export {
   EquipmentLocation,
   InstallationReport,
   Invoice, LOA, LogisticsDetails, PurchaseOrder, sequelize,
-  Tender,
-  User
+  Tender, TenderDocument, User
 };
 
